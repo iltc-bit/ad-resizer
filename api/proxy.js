@@ -1,11 +1,12 @@
-export const config = { api: { bodyParser: false } };
+const config = { api: { bodyParser: false } };
+module.exports = { config };
 
-export default async function handler(req, res) {
+module.exports.default = async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const url = new URL(req.url, );
+  const url = new URL(req.url, `http://${req.headers.host}`);
   const action = url.searchParams.get('action');
 
   const chunks = [];
@@ -26,7 +27,7 @@ export default async function handler(req, res) {
     const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': ,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -37,11 +38,11 @@ export default async function handler(req, res) {
           content: [
             {
               type: 'text',
-              text: 
+              text: `This image is exactly ${width}x${height} pixels. Find all text regions. For each block return: "text", "x" (left edge px), "y" (top edge px), "w" (width px), "h" (height px). Be precise. Return ONLY a JSON array, no markdown. Example: [{"text":"Hello","x":10,"y":20,"w":100,"h":30}]`
             },
             {
               type: 'image_url',
-              image_url: { url: , detail: 'high' }
+              image_url: { url: `data:image/jpeg;base64,${image}`, detail: 'high' }
             }
           ]
         }]
@@ -49,25 +50,24 @@ export default async function handler(req, res) {
     });
 
     const gptData = await gptRes.json();
-    console.log('GPT OCR status:', gptRes.status);
+    console.log('GPT status:', gptRes.status);
 
     if (!gptRes.ok) {
       return res.status(400).json({ error: gptData.error?.message || 'GPT error' });
     }
 
     const content = gptData.choices?.[0]?.message?.content || '[]';
-    console.log('GPT raw:', content.slice(0, 300));
+    console.log('GPT raw:', content.slice(0, 200));
 
     let rawBlocks = [];
     try {
-      const clean = content.replace(//g, '').trim();
+      const clean = content.replace(/```json\n?|\n?```/g, '').trim();
       rawBlocks = JSON.parse(clean);
     } catch(e) {
-      console.log('Parse error:', e.message, 'content:', content.slice(0,100));
+      console.log('Parse error:', e.message);
       rawBlocks = [];
     }
 
-    // Convert x/y/w/h format to vertices format for frontend compatibility
     const blocks = rawBlocks.map(b => ({
       text: b.text,
       x: b.x, y: b.y, w: b.w, h: b.h,
@@ -79,18 +79,18 @@ export default async function handler(req, res) {
       ]
     }));
 
-    console.log('Blocks found:', blocks.length);
+    console.log('Blocks:', blocks.length);
     return res.status(200).json({ blocks });
   }
 
-  // === OpenAI image edit ===
+  // OpenAI image edit
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY not set' });
 
   const openaiRes = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
     headers: {
-      'Authorization': ,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': req.headers['content-type'],
     },
     body,
@@ -98,4 +98,4 @@ export default async function handler(req, res) {
 
   const data = await openaiRes.json();
   res.status(openaiRes.status).json(data);
-}
+};
