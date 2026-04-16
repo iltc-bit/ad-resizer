@@ -751,6 +751,16 @@ async function processImage() {
     const textBlocks = ocrData.blocks || [];
     console.log('[1] Found text blocks:', textBlocks.length);
 
+    // Scale OCR coords back to original image size (OCR was done on resized image)
+    const ocrToOrigScale = 1 / ocrScale;
+    const scaledBlocks = textBlocks.map(b => ({
+      ...b,
+      vertices: b.vertices.map(v => ({
+        x: Math.round((v.x || 0) * ocrToOrigScale),
+        y: Math.round((v.y || 0) * ocrToOrigScale)
+      }))
+    }));
+
     // Step 3: Create masked image (cover text areas with surrounding color samples)
     console.log('[2] Masking text areas...');
     const maskedCanvas = document.createElement('canvas');
