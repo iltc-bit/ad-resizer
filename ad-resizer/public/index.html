@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>廣告素材重排版工具</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface2: #222228;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.15);
+    --accent: #7c6af7;
+    --accent2: #a78bfa;
+    --accent-glow: rgba(124,106,247,0.25);
+    --text: #f0f0f4;
+    --muted: #8888a0;
+    --success: #34d399;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Noto Sans TC', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* HEADER */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface);
+  }
+  .logo-mark {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+  header span {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .api-badge {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .api-status {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .api-status.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .api-status.err { background: var(--danger); }
+  #apiKeyInput {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 6px 10px;
+    width: 260px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #apiKeyInput:focus { border-color: var(--accent); }
+  #apiKeyInput::placeholder { color: var(--muted); }
+
+  /* MAIN LAYOUT */
+  .workspace {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    min-height: calc(100vh - 62px);
+  }
+
+  /* SIDEBAR */
+  aside {
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  /* UPLOAD ZONE */
+  .upload-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: 12px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface2);
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(124,106,247,0.06);
+  }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon {
+    width: 40px; height: 40px;
+    margin: 0 auto 10px;
+    border: 1.5px solid var(--border2);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+  }
+  .upload-zone p { font-size: 13px; color: var(--muted); }
+  .upload-zone strong { color: var(--text); }
+
+  /* THUMBNAIL PREVIEW */
+  #thumbPreview {
+    display: none;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  #thumbPreview img { width: 100%; display: block; }
+  .thumb-info {
+    background: var(--surface2);
+    padding: 8px 12px;
+    font-size: 11px;
+    font-family: var(--mono);
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* PLATFORM GROUPS */
+  .platform-group { margin-bottom: 4px; }
+  .group-header {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 0 6px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+  .size-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: 1px solid transparent;
+    margin-bottom: 3px;
+  }
+  .size-option:hover { background: var(--surface2); }
+  .size-option.selected {
+    background: rgba(124,106,247,0.12);
+    border-color: rgba(124,106,247,0.35);
+  }
+  .size-option input[type="radio"] { display: none; }
+  .size-thumb {
+    width: 36px; height: 36px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+  }
+  .size-thumb-inner {
+    background: var(--accent);
+    opacity: 0.7;
+    border-radius: 2px;
+  }
+  .size-info { flex: 1; min-width: 0; }
+  .size-name { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .size-dims { font-size: 10px; font-family: var(--mono); color: var(--muted); }
+
+  /* PROMPT AREA */
+  textarea#promptInput {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    padding: 10px 12px;
+    resize: vertical;
+    min-height: 80px;
+    outline: none;
+    line-height: 1.5;
+    transition: border-color 0.2s;
+  }
+  textarea#promptInput:focus { border-color: var(--accent); }
+  textarea#promptInput::placeholder { color: var(--muted); }
+  .prompt-hint { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+  /* PROCESS BUTTON */
+  #processBtn {
+    width: 100%;
+    padding: 13px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.02em;
+    position: relative;
+    overflow: hidden;
+  }
+  #processBtn:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 8px 24px var(--accent-glow); }
+  #processBtn:active { transform: translateY(0); }
+  #processBtn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* MAIN CONTENT */
+  main {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+  }
+
+  /* EMPTY STATE */
+  #emptyState {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .empty-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .empty-cell {
+    height: 48px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .empty-cell:nth-child(2) { animation-delay: 0.3s; }
+  .empty-cell:nth-child(3) { animation-delay: 0.6s; }
+  .empty-cell:nth-child(4) { animation-delay: 0.9s; }
+  .empty-cell:nth-child(5) { animation-delay: 1.2s; }
+  .empty-cell:nth-child(6) { animation-delay: 1.5s; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+  }
+
+  /* COMPARISON VIEW */
+  #resultArea { display: none; flex-direction: column; gap: 24px; }
+
+  .compare-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .compare-title { font-size: 18px; font-weight: 700; }
+  .compare-meta { font-size: 12px; font-family: var(--mono); color: var(--muted); }
+
+  .compare-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: var(--mono);
+  }
+  .badge-before { background: rgba(136,136,160,0.15); color: var(--muted); }
+  .badge-after { background: rgba(124,106,247,0.2); color: var(--accent2); }
+  .panel-dims { font-size: 11px; font-family: var(--mono); color: var(--muted); margin-left: auto; }
+  .panel-body {
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 240px;
+    background: repeating-conic-gradient(var(--surface2) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px;
+  }
+  .panel-body img { max-width: 100%; max-height: 420px; display: block; border-radius: 4px; }
+
+  /* LOADING STATE */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(14,14,16,0.85);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    backdrop-filter: blur(4px);
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: var(--muted); font-family: var(--mono); }
+  .loading-sub { font-size: 12px; color: var(--muted); opacity: 0.6; }
+
+  /* TOAST */
+  #toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-size: 13px;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s;
+    z-index: 200;
+    max-width: 320px;
+    line-height: 1.4;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: rgba(52,211,153,0.4); }
+  #toast.error { border-color: rgba(248,113,113,0.4); color: var(--danger); }
+
+  /* DOWNLOAD BTN */
+  .download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+  .download-btn:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent2); }
+
+  /* DIFF BADGE */
+  .diff-info {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+  .diff-pill {
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .diff-pill.expand { border-color: rgba(52,211,153,0.3); color: var(--success); }
+  .diff-pill.shrink { border-color: rgba(251,191,36,0.3); color: var(--warn); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">AD</div>
+  <div>
+    <h1>廣告素材重排版工具</h1>
+    <span>AI-powered creative resizer</span>
+  </div>
+  <div class="api-badge">
+    <div class="api-status" id="apiStatus"></div>
+    <input type="password" id="apiKeyInput" placeholder="貼上 OpenAI API Key (sk-...)" oninput="checkApiKey(this.value)">
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- SIDEBAR -->
+  <aside>
+    <!-- UPLOAD -->
+    <div>
+      <div class="section-label">上傳原始圖片</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept="image/*" onchange="handleFile(this.files[0])">
+        <div class="upload-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <p><strong>點擊上傳</strong>或拖曳圖片</p>
+        <p style="margin-top:4px;font-size:11px;">PNG、JPG、WEBP，任意尺寸</p>
+      </div>
+      <div id="thumbPreview">
+        <img id="thumbImg" src="" alt="原圖預覽">
+        <div class="thumb-info">
+          <span id="origDims">—</span>
+          <span id="origSize">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIZE SELECTION -->
+    <div>
+      <div class="section-label">選擇目標版位</div>
+
+      <div class="platform-group">
+        <div class="group-header">網頁版位</div>
+        <label class="size-option" onclick="selectSize(this, 320, 220, '浮動 PC')">
+          <input type="radio" name="size" value="320x220">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:28px;height:19px;"></div></div>
+          <div class="size-info"><div class="size-name">浮動 PC</div><div class="size-dims">320 × 220</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 320, 100, '浮動 MB')">
+          <input type="radio" name="size" value="320x100">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:28px;height:9px;"></div></div>
+          <div class="size-info"><div class="size-name">浮動 MB</div><div class="size-dims">320 × 100</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 728, 110, '文中 PC')">
+          <input type="radio" name="size" value="728x110">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:32px;height:5px;"></div></div>
+          <div class="size-info"><div class="size-name">文中 PC</div><div class="size-dims">728 × 110</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 320, 70, '文中 MB')">
+          <input type="radio" name="size" value="320x70">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:28px;height:6px;"></div></div>
+          <div class="size-info"><div class="size-name">文中 MB</div><div class="size-dims">320 × 70</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 300, 250, '文末 (PC+MB)')">
+          <input type="radio" name="size" value="300x250">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:24px;height:20px;"></div></div>
+          <div class="size-info"><div class="size-name">文末 (PC+MB)</div><div class="size-dims">300 × 250</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 300, 450, '推薦版位 (PC+MB)')">
+          <input type="radio" name="size" value="300x450">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:18px;height:27px;"></div></div>
+          <div class="size-info"><div class="size-name">推薦版位 (PC+MB)</div><div class="size-dims">300 × 450</div></div>
+        </label>
+      </div>
+
+      <div class="platform-group">
+        <div class="group-header">影音 / 首頁</div>
+        <label class="size-option" onclick="selectSize(this, 1920, 1080, '熟齡影音橫式 16:9')">
+          <input type="radio" name="size" value="1920x1080">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:32px;height:18px;"></div></div>
+          <div class="size-info"><div class="size-name">熟齡影音橫式</div><div class="size-dims">1920 × 1080 (16:9)</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 2400, 960, '首頁 PC')">
+          <input type="radio" name="size" value="2400x960">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:34px;height:14px;"></div></div>
+          <div class="size-info"><div class="size-name">首頁 PC</div><div class="size-dims">2400 × 960</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 720, 960, '首頁 MB')">
+          <input type="radio" name="size" value="720x960">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:22px;height:29px;"></div></div>
+          <div class="size-info"><div class="size-name">首頁 MB</div><div class="size-dims">720 × 960</div></div>
+        </label>
+      </div>
+
+      <div class="platform-group">
+        <div class="group-header">蓋板</div>
+        <label class="size-option" onclick="selectSize(this, 970, 480, '蓋板 PC')">
+          <input type="radio" name="size" value="970x480">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:32px;height:16px;"></div></div>
+          <div class="size-info"><div class="size-name">蓋板 PC</div><div class="size-dims">970 × 480</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 320, 480, '蓋板 MB')">
+          <input type="radio" name="size" value="320x480">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:20px;height:30px;"></div></div>
+          <div class="size-info"><div class="size-name">蓋板 MB</div><div class="size-dims">320 × 480</div></div>
+        </label>
+      </div>
+
+      <div class="platform-group">
+        <div class="group-header">社群媒體</div>
+        <label class="size-option" onclick="selectSize(this, 1040, 1040, 'LINE 圖文訊息')">
+          <input type="radio" name="size" value="1040x1040">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:26px;height:26px;"></div></div>
+          <div class="size-info"><div class="size-name">LINE 圖文訊息</div><div class="size-dims">1040 × 1040</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 1080, 1920, 'Facebook 直向廣告')">
+          <input type="radio" name="size" value="1080x1920">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:15px;height:26px;"></div></div>
+          <div class="size-info"><div class="size-name">Facebook 直向</div><div class="size-dims">1080 × 1920 (9:16)</div></div>
+        </label>
+        <label class="size-option" onclick="selectSize(this, 1200, 628, 'Facebook 橫向廣告')">
+          <input type="radio" name="size" value="1200x628">
+          <div class="size-thumb"><div class="size-thumb-inner" style="width:30px;height:16px;"></div></div>
+          <div class="size-info"><div class="size-name">Facebook 橫向</div><div class="size-dims">1200 × 628 (1.91:1)</div></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- PROMPT -->
+    <div>
+      <div class="section-label">附加提示詞（選填）</div>
+      <textarea id="promptInput" placeholder="（選填）有特殊需求再填，例如：保留右側人物、強調左上角 Logo…"></textarea>
+      <div class="prompt-hint">留空即可 — 工具會根據版位比例變化，自動產生最適合的 AI 指令。</div>
+    </div>
+
+    <!-- PROCESS -->
+    <button id="processBtn" onclick="processImage()" disabled>
+      開始 AI 重排版
+    </button>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+    <div id="emptyState">
+      <div class="empty-grid">
+        <div class="empty-cell"></div>
+        <div class="empty-cell"></div>
+        <div class="empty-cell"></div>
+        <div class="empty-cell"></div>
+        <div class="empty-cell"></div>
+        <div class="empty-cell"></div>
+      </div>
+      <p style="font-size:15px;font-weight:500;color:var(--text)">上傳圖片並選擇版位</p>
+      <p style="font-size:13px;">AI 會自動對背景、文字、元素進行智慧重排版</p>
+      <p style="font-size:12px;margin-top:8px;">
+        需要 <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent2);text-decoration:none;">OpenAI API Key</a>（需有 gpt-image-1 存取權限）
+      </p>
+    </div>
+
+    <div id="resultArea">
+      <div class="compare-header">
+        <div>
+          <div class="compare-title" id="resultTitle">結果預覽</div>
+          <div class="diff-info" id="diffInfo"></div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <a id="downloadBtn" class="download-btn" download="resized.png">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下載結果
+          </a>
+        </div>
+      </div>
+
+      <div class="compare-panels">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-badge badge-before">BEFORE</span>
+            <span class="panel-dims" id="beforeDims">—</span>
+          </div>
+          <div class="panel-body">
+            <img id="beforeImg" src="" alt="原圖">
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-badge badge-after">AFTER</span>
+            <span class="panel-dims" id="afterDims">—</span>
+          </div>
+          <div class="panel-body" id="afterPanel">
+            <img id="afterImg" src="" alt="結果">
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">AI 正在處理中...</div>
+  <div class="loading-sub" id="loadingSub">背景延伸通常需要 10–30 秒</div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+let uploadedFile = null;
+let uploadedDataUrl = null;
+let uploadedWidth = 0;
+let uploadedHeight = 0;
+let selectedW = 0;
+let selectedH = 0;
+let selectedName = '';
+let apiKey = '';
+
+function checkApiKey(val) {
+  apiKey = val.trim();
+  const st = document.getElementById('apiStatus');
+  if (apiKey.startsWith('sk-') && apiKey.length > 20) {
+    st.className = 'api-status ok';
+  } else if (apiKey.length > 0) {
+    st.className = 'api-status err';
+  } else {
+    st.className = 'api-status';
+  }
+  updateBtn();
+}
+
+function handleFile(file) {
+  if (!file) return;
+  uploadedFile = file;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    uploadedDataUrl = e.target.result;
+    const img = new Image();
+    img.onload = () => {
+      uploadedWidth = img.width;
+      uploadedHeight = img.height;
+      document.getElementById('thumbImg').src = uploadedDataUrl;
+      document.getElementById('thumbPreview').style.display = 'block';
+      document.getElementById('origDims').textContent = `${img.width} × ${img.height}px`;
+      document.getElementById('origSize').textContent = formatSize(file.size);
+      document.getElementById('beforeImg').src = uploadedDataUrl;
+      document.getElementById('beforeDims').textContent = `${img.width} × ${img.height}px`;
+      updateBtn();
+    };
+    img.src = uploadedDataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+
+function selectSize(el, w, h, name) {
+  document.querySelectorAll('.size-option').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedW = w; selectedH = h; selectedName = name;
+  updateBtn();
+}
+
+function updateBtn() {
+  const btn = document.getElementById('processBtn');
+  btn.disabled = !(uploadedFile && selectedW && apiKey.startsWith('sk-'));
+  if (!apiKey || !apiKey.startsWith('sk-')) {
+    btn.textContent = '請先輸入 API Key';
+  } else if (!uploadedFile) {
+    btn.textContent = '請先上傳圖片';
+  } else if (!selectedW) {
+    btn.textContent = '請選擇目標版位';
+  } else {
+    btn.textContent = `開始 AI 重排版 → ${selectedName}`;
+  }
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `show ${type}`;
+  setTimeout(() => { t.className = ''; }, 4000);
+}
+
+function setLoading(on, text = 'AI 正在處理中...', sub = '背景延伸通常需要 10–30 秒') {
+  const ov = document.getElementById('loadingOverlay');
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('loadingSub').textContent = sub;
+  ov.className = on ? 'loading-overlay show' : 'loading-overlay';
+}
+
+async function processImage() {
+  if (!uploadedFile || !selectedW || !apiKey) return;
+
+  setLoading(true, '準備圖片資料...', '分析原圖尺寸與目標版位');
+  document.getElementById('processBtn').disabled = true;
+
+  try {
+    const userPrompt = document.getElementById('promptInput').value.trim();
+
+    // Step 1: draw original onto clean canvas
+    console.log('[1] drawing to canvas...');
+    const imgEl = document.getElementById('thumbImg');
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = uploadedWidth;
+    srcCanvas.height = uploadedHeight;
+    srcCanvas.getContext('2d').drawImage(imgEl, 0, 0);
+
+    // Step 2: pick closest OpenAI-supported size that matches target ratio
+    // OpenAI gpt-image-1 supported: 1024x1024, 1536x1024, 1024x1536
+    const targetRatio = selectedW / selectedH;
+    let apiW, apiH;
+    const candidates = [
+      { w: 1024, h: 1024 },
+      { w: 1536, h: 1024 },
+      { w: 1024, h: 1536 },
+    ];
+    let bestDiff = Infinity;
+    for (const c of candidates) {
+      const diff = Math.abs(c.w / c.h - targetRatio);
+      if (diff < bestDiff) { bestDiff = diff; apiW = c.w; apiH = c.h; }
+    }
+    console.log('[2] API canvas size:', apiW, 'x', apiH, ' (target ratio:', targetRatio.toFixed(3), ')');
+
+    // Step 3: place original centred on API-sized canvas, transparent borders = outpaint zone
+    const scaleToFit = Math.min(apiW / uploadedWidth, apiH / uploadedHeight);
+    const fitW = Math.round(uploadedWidth * scaleToFit);
+    const fitH = Math.round(uploadedHeight * scaleToFit);
+    const offsetX = Math.round((apiW - fitW) / 2);
+    const offsetY = Math.round((apiH - fitH) / 2);
+
+    const apiCanvas = document.createElement('canvas');
+    apiCanvas.width = apiW;
+    apiCanvas.height = apiH;
+    apiCanvas.getContext('2d').drawImage(srcCanvas, offsetX, offsetY, fitW, fitH);
+    console.log('[3] placed image at', offsetX, offsetY, fitW, 'x', fitH);
+
+    // Step 4: export PNG blob
+    const imageBlob = await new Promise((res, rej) => {
+      apiCanvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
+    });
+    console.log('[4] blob size:', imageBlob.size);
+
+    // Auto-generate smart prompt based on ratio transformation
+    function buildSmartPrompt(origW, origH, tW, tH, apiCanvasW, apiCanvasH, userOverride) {
+      if (userOverride) return userOverride;
+
+      const origRatio = origW / origH;
+      const targetRatio = tW / tH;
+      const ratioDiff = targetRatio / origRatio;
+
+      let directionHint = '';
+      let layoutHint = '';
+
+      if (ratioDiff > 1.4) {
+        // Much wider: e.g. 1:1 → 16:9, need to extend left/right significantly
+        directionHint = 'The canvas is now much wider than the original. Extend the background horizontally on both sides.';
+        layoutHint = 'Reposition text and headline elements — move them to the left or right thirds to make use of the expanded horizontal space. Avoid centering everything.';
+      } else if (ratioDiff > 1.1) {
+        // Slightly wider
+        directionHint = 'The canvas is slightly wider. Extend the background left and right.';
+        layoutHint = 'Keep the main subject centred or slightly offset. Spread supporting text or decorative elements into the new side space.';
+      } else if (ratioDiff < 0.7) {
+        // Much taller: e.g. 16:9 → 9:16
+        directionHint = 'The canvas is now much taller than the original. Extend the background significantly above and below.';
+        layoutHint = 'Stack the layout vertically — place the headline at the top, the main visual in the middle, and a call-to-action or supporting text at the bottom. Use the vertical space intentionally.';
+      } else if (ratioDiff < 0.9) {
+        // Slightly taller
+        directionHint = 'The canvas is slightly taller. Extend the background above and/or below.';
+        layoutHint = 'Add breathing room above and below the main content. Place any text or tagline in the newly created top or bottom space.';
+      } else {
+        // Similar ratio, mainly resizing
+        directionHint = 'The aspect ratio is similar to the original. Cleanly fill and polish the full canvas.';
+        layoutHint = 'Maintain the existing layout composition. Extend background details naturally.';
+      }
+
+      return `You are redesigning an advertisement creative for a new canvas size of ${apiCanvasW}x${apiCanvasH} pixels.
+
+The original image is placed centred on the canvas. The transparent/empty areas around it must be filled intelligently.
+
+Instructions:
+1. ${directionHint}
+2. ${layoutHint}
+3. Do NOT fill empty areas with solid colors, gradients, or blurred versions of the image.
+4. Extend the background naturally — match the existing lighting, color palette, texture, and atmosphere.
+5. If there is text in the original image, reposition or re-render it to suit the new layout. Do not crop or obscure existing text.
+6. The final result must look like it was originally designed for ${tW}x${tH}, not like a resized or padded version of a smaller image.
+7. Maintain brand consistency: colors, fonts style, and visual tone must be preserved.`;
+    }
+
+    const finalPrompt = buildSmartPrompt(uploadedWidth, uploadedHeight, selectedW, selectedH, apiW, apiH, userPrompt);
+
+    // Step 6: call OpenAI
+    console.log('[5] building FormData...');
+    const formData = new FormData();
+    formData.append('model', 'gpt-image-1');
+    formData.append('image', imageBlob, 'image.png');
+    formData.append('prompt', finalPrompt);
+    formData.append('size', `${apiW}x${apiH}`);
+    formData.append('n', '1');
+
+    setLoading(true, 'OpenAI 生成中...', `API 畫布 ${apiW}×${apiH} → 輸出將裁切至 ${selectedW}×${selectedH}`);
+
+    console.log('[6] fetching OpenAI...');
+    const response = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      body: formData
+    });
+    console.log('[6] status:', response.status);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      let errMsg = `API 錯誤 (${response.status})`;
+      try { errMsg = JSON.parse(errText).error?.message || errMsg; } catch(e) {}
+      throw new Error(errMsg);
+    }
+
+    const json = await response.json();
+    const item = json.data?.[0];
+    if (!item?.b64_json && !item?.url) throw new Error('回傳格式異常');
+
+    // Step 7: load AI result image
+    console.log('[7] loading result image...');
+    const aiImg = new Image();
+    await new Promise((res, rej) => {
+      aiImg.onload = res;
+      aiImg.onerror = rej;
+      aiImg.src = item.b64_json
+        ? 'data:image/png;base64,' + item.b64_json
+        : item.url;
+    });
+    console.log('[7] AI image:', aiImg.width, 'x', aiImg.height);
+
+    // Step 8: resize to EXACT target dimensions using canvas
+    console.log('[8] resizing to exact target:', selectedW, 'x', selectedH);
+    setLoading(true, '縮放至精確尺寸...', `${aiImg.width}×${aiImg.height} → ${selectedW}×${selectedH}`);
+
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = selectedW;
+    finalCanvas.height = selectedH;
+    const fCtx = finalCanvas.getContext('2d');
+    // Cover-fit: scale AI result to cover exact target, centre-crop
+    const coverScale = Math.max(selectedW / aiImg.width, selectedH / aiImg.height);
+    const covW = Math.round(aiImg.width * coverScale);
+    const covH = Math.round(aiImg.height * coverScale);
+    const covX = Math.round((selectedW - covW) / 2);
+    const covY = Math.round((selectedH - covH) / 2);
+    fCtx.drawImage(aiImg, covX, covY, covW, covH);
+    console.log('[8] final canvas drawn');
+
+    // Step 9: export final PNG as base64
+    const resultUrl = finalCanvas.toDataURL('image/png');
+    console.log('[9] resultUrl length:', resultUrl.length);
+
+    // Show result
+    document.getElementById('emptyState').style.display = 'none';
+    const ra = document.getElementById('resultArea');
+    ra.style.display = 'flex';
+
+    document.getElementById('resultTitle').textContent = `${selectedName} 重排版完成`;
+    document.getElementById('afterImg').src = resultUrl;
+    document.getElementById('afterDims').textContent = `${selectedW} × ${selectedH}px`;
+
+    // Diff pills
+    const diffInfo = document.getElementById('diffInfo');
+    diffInfo.innerHTML = '';
+    const wDiff = selectedW - uploadedWidth;
+    const hDiff = selectedH - uploadedHeight;
+    if (wDiff !== 0) {
+      const pill = document.createElement('span');
+      pill.className = `diff-pill ${wDiff > 0 ? 'expand' : 'shrink'}`;
+      pill.textContent = `寬 ${wDiff > 0 ? '+' : ''}${wDiff}px`;
+      diffInfo.appendChild(pill);
+    }
+    if (hDiff !== 0) {
+      const pill = document.createElement('span');
+      pill.className = `diff-pill ${hDiff > 0 ? 'expand' : 'shrink'}`;
+      pill.textContent = `高 ${hDiff > 0 ? '+' : ''}${hDiff}px`;
+      diffInfo.appendChild(pill);
+    }
+
+    // Download — use anchor with base64 dataURL
+    const dlBtn = document.getElementById('downloadBtn');
+    dlBtn.href = resultUrl;
+    dlBtn.download = `${selectedName.replace(/\s+/g, '_')}_${selectedW}x${selectedH}.png`;
+
+    setLoading(false);
+    showToast('處理完成！可下載結果圖片。', 'success');
+
+  } catch (err) {
+    setLoading(false);
+    console.error('[ERROR] name:', err.name, 'message:', err.message, 'stack:', err.stack);
+    showToast(`處理失敗：${err.name}: ${err.message}`, 'error');
+  }
+
+  document.getElementById('processBtn').disabled = false;
+  updateBtn();
+}
+</script>
+</body>
+</html>
