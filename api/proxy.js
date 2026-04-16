@@ -5,9 +5,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const authHeader = req.headers['authorization'];
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Missing Authorization header' });
+  // Read API key from Vercel environment variable (safe, server-side only)
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ error: 'API key not configured on server' });
   }
 
   // Stream raw body to OpenAI
@@ -18,7 +19,7 @@ export default async function handler(req, res) {
   const openaiRes = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
     headers: {
-      'Authorization': authHeader,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': req.headers['content-type'],
     },
     body,
