@@ -13,7 +13,8 @@ module.exports.default = async function handler(req, res) {
   for await (const chunk of req) chunks.push(chunk);
   const body = Buffer.concat(chunks);
 
-  if (action === 'ocr') {
+  // === Layout analysis via GPT-4o ===
+  if (action === 'analyze') {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY not set' });
 
@@ -21,8 +22,7 @@ module.exports.default = async function handler(req, res) {
     try { parsed = JSON.parse(body.toString()); }
     catch(e) { return res.status(400).json({ error: 'Invalid JSON' }); }
 
-    const { image, width, height } = parsed;
-    if (!image) return res.status(400).json({ error: 'Missing image' });
+    const { image, origW, origH, targetW, targetH, targetName } = parsed;
 
     const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -32,13 +32,30 @@ module.exports.default = async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        max_tokens: 2000,
+        max_tokens: 1500,
         messages: [{
           role: 'user',
           content: [
             {
               type: 'text',
-              text: `This image is exactly ${width}x${height} pixels. Find all text regions. For each block return: "text", "x" (left edge px), "y" (top edge px), "w" (width px), "h" (height px). Be precise. Return ONLY a JSON array, no markdown. Example: [{"text":"Hello","x":10,"y":20,"w":100,"h":30}]`
+              text: `你是廣告設計顧問。這是一張 ${origW}x${origH} 的廣告圖，需要重新排版成 ${targetW}x${targetH}（${targetName}）。
+
+請分析這張圖，用繁體中文輸出以下內容（JSON格式）：
+
+{
+  "elements": [
+    {"type": "文字/logo/按鈕/圖片", "content": "內容描述", "currentPosition": "目前在哪裡（例：左側中央）", "suggestedPosition": "建議在新版位放在哪裡", "reason": "原因"}
+  ],
+  "layoutStrategy": "整體排版策略說明（2-3句）",
+  "canvaSteps": [
+    "步驟1：...",
+    "步驟2：...",
+    "步驟3：..."
+  ],
+  "warnings": ["注意事項1", "注意事項2"]
+}
+
+只回傳 JSON，不要其他文字。`
             },
             {
               type: 'image_url',
@@ -50,40 +67,23 @@ module.exports.default = async function handler(req, res) {
     });
 
     const gptData = await gptRes.json();
-    console.log('GPT status:', gptRes.status);
-
     if (!gptRes.ok) {
       return res.status(400).json({ error: gptData.error?.message || 'GPT error' });
     }
 
-    const content = gptData.choices?.[0]?.message?.content || '[]';
-    console.log('GPT raw:', content.slice(0, 200));
-
-    let rawBlocks = [];
+    const content = gptData.choices?.[0]?.message?.content || '{}';
+    let analysis = {};
     try {
       const clean = content.replace(/```json\n?|\n?```/g, '').trim();
-      rawBlocks = JSON.parse(clean);
+      analysis = JSON.parse(clean);
     } catch(e) {
-      console.log('Parse error:', e.message);
-      rawBlocks = [];
+      analysis = { layoutStrategy: content, elements: [], canvaSteps: [], warnings: [] };
     }
 
-    const blocks = rawBlocks.map(b => ({
-      text: b.text,
-      x: b.x, y: b.y, w: b.w, h: b.h,
-      vertices: [
-        {x: b.x, y: b.y},
-        {x: b.x + b.w, y: b.y},
-        {x: b.x + b.w, y: b.y + b.h},
-        {x: b.x, y: b.y + b.h}
-      ]
-    }));
-
-    console.log('Blocks:', blocks.length);
-    return res.status(200).json({ blocks });
+    return res.status(200).json(analysis);
   }
 
-  // OpenAI image edit
+  // === OpenAI image edit ===
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY not set' });
 
