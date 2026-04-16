@@ -803,7 +803,7 @@ async function processImage() {
     apiCanvas.getContext('2d').drawImage(maskedCanvas, offsetX, offsetY, fitW, fitH);
 
     const imageBlob = await new Promise((res, rej) => {
-      apiCanvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
+      apiCanvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/jpeg', 0.92);
     });
 
     // Step 6: Build smart prompt
@@ -843,7 +843,7 @@ async function processImage() {
     setLoading(true, 'OpenAI 生成背景中...', `約需 20–40 秒，文字將稍後疊回`);
     const formData = new FormData();
     formData.append('model', 'gpt-image-1');
-    formData.append('image', imageBlob, 'image.png');
+    formData.append('image', imageBlob, 'image.jpg');
     formData.append('prompt', finalPrompt);
     formData.append('size', `${apiW}x${apiH}`);
     formData.append('n', '1');
