@@ -5,14 +5,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  const url = new URL(req.url, );
   const action = url.searchParams.get('action');
 
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const body = Buffer.concat(chunks);
 
-  // === OCR via GPT-4o vision ===
   if (action === 'ocr') {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY not set' });
@@ -21,13 +20,13 @@ export default async function handler(req, res) {
     try { parsed = JSON.parse(body.toString()); }
     catch(e) { return res.status(400).json({ error: 'Invalid JSON' }); }
 
-    const base64Image = parsed.image;
-    if (!base64Image) return res.status(400).json({ error: 'Missing image' });
+    const { image, width, height } = parsed;
+    if (!image) return res.status(400).json({ error: 'Missing image' });
 
     const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': ,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -38,18 +37,11 @@ export default async function handler(req, res) {
           content: [
             {
               type: 'text',
-              text: `Detect all text in this image and return their bounding box coordinates.
-Return ONLY a JSON array, no other text. Each item should have:
-- "text": the text content
-- "vertices": array of 4 points [{x,y},{x,y},{x,y},{x,y}] as pixel coordinates (top-left, top-right, bottom-right, bottom-left)
-
-The image is ${parsed.width}x${parsed.height} pixels.
-Be precise with coordinates. Include ALL visible text including logos, buttons, and small text.
-Return format: [{"text":"...","vertices":[{"x":0,"y":0},...]},...]`
+              text: 
             },
             {
               type: 'image_url',
-              image_url: { url: `data:image/png;base64,${base64Image}`, detail: 'high' }
+              image_url: { url: , detail: 'high' }
             }
           ]
         }]
@@ -64,18 +56,30 @@ Return format: [{"text":"...","vertices":[{"x":0,"y":0},...]},...]`
     }
 
     const content = gptData.choices?.[0]?.message?.content || '[]';
-    console.log('GPT OCR raw:', content.slice(0, 200));
+    console.log('GPT raw:', content.slice(0, 300));
 
-    let blocks = [];
+    let rawBlocks = [];
     try {
-      const clean = content.replace(/```json\n?|\n?```/g, '').trim();
-      blocks = JSON.parse(clean);
+      const clean = content.replace(//g, '').trim();
+      rawBlocks = JSON.parse(clean);
     } catch(e) {
-      console.log('Parse error:', e.message);
-      blocks = [];
+      console.log('Parse error:', e.message, 'content:', content.slice(0,100));
+      rawBlocks = [];
     }
 
-    console.log('Parsed blocks:', blocks.length);
+    // Convert x/y/w/h format to vertices format for frontend compatibility
+    const blocks = rawBlocks.map(b => ({
+      text: b.text,
+      x: b.x, y: b.y, w: b.w, h: b.h,
+      vertices: [
+        {x: b.x, y: b.y},
+        {x: b.x + b.w, y: b.y},
+        {x: b.x + b.w, y: b.y + b.h},
+        {x: b.x, y: b.y + b.h}
+      ]
+    }));
+
+    console.log('Blocks found:', blocks.length);
     return res.status(200).json({ blocks });
   }
 
@@ -86,7 +90,7 @@ Return format: [{"text":"...","vertices":[{"x":0,"y":0},...]},...]`
   const openaiRes = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': ,
       'Content-Type': req.headers['content-type'],
     },
     body,
