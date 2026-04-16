@@ -564,7 +564,7 @@
     <div>
       <div class="section-label">附加提示詞（選填）</div>
       <textarea id="promptInput" placeholder="（選填）有特殊需求再填，例如：保留右側人物、強調左上角 Logo…"></textarea>
-      <div class="prompt-hint">留空即可 — 工具會根據版位比例變化，自動產生最適合的 AI 指令。</div>
+      <div class="prompt-hint">留空即可，工具會自動判斷延伸方向。下載結果後可在 Canva 加回文字與 Logo。</div>
     </div>
 
     <!-- PROCESS -->
@@ -725,73 +725,20 @@ function setLoading(on, text = 'AI 正在處理中...', sub = '背景延伸通�
 async function processImage() {
   if (!uploadedFile || !selectedW) return;
 
-  setLoading(true, 'OCR 偵測文字位置...', '使用 GPT-4o 分析圖片文字');
+  setLoading(true, '準備圖片...', '分析尺寸與版位');
   document.getElementById('processBtn').disabled = true;
 
   try {
     const userPrompt = document.getElementById('promptInput').value.trim();
     const imgEl = document.getElementById('thumbImg');
 
-    // ── 1. Draw original to srcCanvas ──────────────────────────
+    // ── 1. Draw original ──────────────────────────────────────
     const srcCanvas = document.createElement('canvas');
     srcCanvas.width = uploadedWidth;
     srcCanvas.height = uploadedHeight;
-    const srcCtx = srcCanvas.getContext('2d');
-    srcCtx.drawImage(imgEl, 0, 0);
+    srcCanvas.getContext('2d').drawImage(imgEl, 0, 0);
 
-    // ── 2. Resize to max 1024px for OCR ───────────────────────
-    const ocrMaxDim = 1024;
-    const ocrScale = Math.min(1, ocrMaxDim / Math.max(uploadedWidth, uploadedHeight));
-    const ocrW = Math.round(uploadedWidth * ocrScale);
-    const ocrH = Math.round(uploadedHeight * ocrScale);
-    const ocrCanvas = document.createElement('canvas');
-    ocrCanvas.width = ocrW;
-    ocrCanvas.height = ocrH;
-    ocrCanvas.getContext('2d').drawImage(imgEl, 0, 0, ocrW, ocrH);
-    const ocrBase64 = ocrCanvas.toDataURL('image/jpeg', 0.9).split(',')[1];
-    console.log('[1] OCR image:', ocrW, 'x', ocrH);
-
-    // ── 3. Run OCR ─────────────────────────────────────────────
-    const ocrRes = await fetch('/api/proxy?action=ocr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: ocrBase64, width: ocrW, height: ocrH })
-    });
-    const ocrData = await ocrRes.json();
-    const textBlocks = ocrData.blocks || [];
-    console.log('[2] text blocks:', textBlocks.length);
-
-    // Scale OCR coords back to original image size
-    const ocrToOrig = 1 / ocrScale;
-    const scaledBlocks = textBlocks.map(b => ({
-      text: b.text,
-      x: Math.round((b.x || 0) * ocrToOrig),
-      y: Math.round((b.y || 0) * ocrToOrig),
-      w: Math.round((b.w || 0) * ocrToOrig),
-      h: Math.round((b.h || 0) * ocrToOrig),
-      vertices: (b.vertices || []).map(v => ({
-        x: Math.round((v.x || 0) * ocrToOrig),
-        y: Math.round((v.y || 0) * ocrToOrig)
-      }))
-    }));
-
-    // ── 4. Mask text in original image ─────────────────────────
-    const maskedCanvas = document.createElement('canvas');
-    maskedCanvas.width = uploadedWidth;
-    maskedCanvas.height = uploadedHeight;
-    const mCtx = maskedCanvas.getContext('2d');
-    mCtx.drawImage(imgEl, 0, 0);
-    for (const b of scaledBlocks) {
-      const bx = Math.max(0, b.x - 8);
-      const by = Math.max(0, b.y - 8);
-      const bw = Math.min(uploadedWidth - bx, b.w + 16);
-      const bh = Math.min(uploadedHeight - by, b.h + 16);
-      const px = srcCtx.getImageData(Math.max(0, bx - 15), Math.max(0, by - 15), 1, 1).data;
-      mCtx.fillStyle = `rgb(${px[0]},${px[1]},${px[2]})`;
-      mCtx.fillRect(bx, by, bw, bh);
-    }
-
-    // ── 5. Pick OpenAI canvas size ─────────────────────────────
+    // ── 2. Pick OpenAI canvas size (closest ratio) ────────────
     const targetRatio = selectedW / selectedH;
     const candidates = [{w:1024,h:1024},{w:1536,h:1024},{w:1024,h:1536}];
     let apiW, apiH, bestDiff = Infinity;
@@ -799,41 +746,41 @@ async function processImage() {
       const diff = Math.abs(c.w/c.h - targetRatio);
       if (diff < bestDiff) { bestDiff=diff; apiW=c.w; apiH=c.h; }
     }
-    console.log('[3] API canvas:', apiW, 'x', apiH);
+    console.log('[1] API canvas:', apiW, 'x', apiH);
 
-    // ── 6. Place masked image (cover crop) on API canvas ───────
-    const scaleToCover = Math.max(apiW / uploadedWidth, apiH / uploadedHeight);
-    const coveredW = Math.round(uploadedWidth * scaleToCover);
-    const coveredH = Math.round(uploadedHeight * scaleToCover);
-    const coveredX = Math.round((apiW - coveredW) / 2);
-    const coveredY = Math.round((apiH - coveredH) / 2);
+    // ── 3. Place original centred (fit) on API canvas ─────────
+    const scaleToFit = Math.min(apiW / uploadedWidth, apiH / uploadedHeight);
+    const fitW = Math.round(uploadedWidth * scaleToFit);
+    const fitH = Math.round(uploadedHeight * scaleToFit);
+    const offsetX = Math.round((apiW - fitW) / 2);
+    const offsetY = Math.round((apiH - fitH) / 2);
 
     const apiCanvas = document.createElement('canvas');
     apiCanvas.width = apiW;
     apiCanvas.height = apiH;
-    apiCanvas.getContext('2d').drawImage(maskedCanvas, coveredX, coveredY, coveredW, coveredH);
+    apiCanvas.getContext('2d').drawImage(srcCanvas, offsetX, offsetY, fitW, fitH);
 
     const imageBlob = await new Promise((res, rej) => {
       apiCanvas.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/png');
     });
-    console.log('[4] blob:', (imageBlob.size/1024/1024).toFixed(2), 'MB');
+    console.log('[2] blob:', (imageBlob.size/1024/1024).toFixed(2), 'MB');
 
-    // ── 7. Build prompt ────────────────────────────────────────
+    // ── 4. Build prompt ───────────────────────────────────────
     function buildPrompt(origW, origH, tW, tH, aW, aH, override) {
       if (override) return override;
       const ratioDiff = (tW/tH) / (origW/origH);
       let hint = '';
-      if (ratioDiff > 1.4) hint = 'Extend background widely left and right.';
-      else if (ratioDiff > 1.1) hint = 'Extend background slightly left and right.';
-      else if (ratioDiff < 0.7) hint = 'Extend background widely above and below.';
-      else if (ratioDiff < 0.9) hint = 'Extend background slightly above and below.';
-      else hint = 'Fill the canvas naturally.';
-      return `Extend this advertisement image to fill a ${aW}x${aH} canvas. ${hint} Do NOT add any text or characters. Match the existing lighting, colors, and atmosphere.`;
+      if (ratioDiff > 1.4) hint = 'The canvas is much wider — extend background left and right significantly.';
+      else if (ratioDiff > 1.1) hint = 'The canvas is slightly wider — extend background left and right.';
+      else if (ratioDiff < 0.7) hint = 'The canvas is much taller — extend background above and below significantly.';
+      else if (ratioDiff < 0.9) hint = 'The canvas is slightly taller — extend background above and below.';
+      else hint = 'Fill the canvas naturally, maintaining composition.';
+      return `Seamlessly extend the background of this advertisement image to fill the entire ${aW}x${aH} canvas. The original image is centred. ${hint} Do NOT add any text, logos, or UI elements. Match the existing lighting, color temperature, and atmosphere perfectly. The result should look like the image was originally shot at this canvas size.`;
     }
     const finalPrompt = buildPrompt(uploadedWidth, uploadedHeight, selectedW, selectedH, apiW, apiH, userPrompt);
 
-    // ── 8. Call OpenAI ─────────────────────────────────────────
-    setLoading(true, 'OpenAI 生成背景中...', '約需 20–40 秒');
+    // ── 5. Call OpenAI ────────────────────────────────────────
+    setLoading(true, 'AI 延伸背景中...', `約需 20–40 秒`);
     const formData = new FormData();
     formData.append('model', 'gpt-image-1');
     formData.append('image', imageBlob, 'image.png');
@@ -851,21 +798,19 @@ async function processImage() {
     const item = jsonData.data?.[0];
     if (!item?.b64_json && !item?.url) throw new Error('回傳格式異常');
 
-    // ── 9. Load AI result ──────────────────────────────────────
-    setLoading(true, '疊回原始文字...', '還原文字位置');
+    // ── 6. Load AI result ─────────────────────────────────────
+    setLoading(true, '縮放至目標尺寸...', `${apiW}×${apiH} → ${selectedW}×${selectedH}`);
     const aiImg = new Image();
     await new Promise((res, rej) => {
       aiImg.onload = res; aiImg.onerror = rej;
       aiImg.src = item.b64_json ? 'data:image/png;base64,' + item.b64_json : item.url;
     });
-    console.log('[5] aiImg:', aiImg.width, 'x', aiImg.height);
 
-    // ── 10. Draw AI result onto final canvas ───────────────────
+    // ── 7. Resize to exact target ─────────────────────────────
     const finalCanvas = document.createElement('canvas');
     finalCanvas.width = selectedW;
     finalCanvas.height = selectedH;
     const fCtx = finalCanvas.getContext('2d');
-
     const aiScale = Math.max(selectedW / aiImg.width, selectedH / aiImg.height);
     const aiDrawW = Math.round(aiImg.width * aiScale);
     const aiDrawH = Math.round(aiImg.height * aiScale);
@@ -873,42 +818,12 @@ async function processImage() {
     const aiDrawY = Math.round((selectedH - aiDrawH) / 2);
     fCtx.drawImage(aiImg, aiDrawX, aiDrawY, aiDrawW, aiDrawH);
 
-    // ── 11. Overlay original text blocks ───────────────────────
-    // Coord chain: orig → API canvas → final canvas
-    // finalX = aiDrawX + (coveredX + origX * scaleToCover) * aiScale
-    // finalY = aiDrawY + (coveredY + origY * scaleToCover) * aiScale
-    const textScale = scaleToCover * aiScale;
-
-    if (scaledBlocks.length > 0) {
-      fCtx.save();
-      fCtx.beginPath();
-      for (const b of scaledBlocks) {
-        if (!b.w || !b.h) continue;
-        const fx = aiDrawX + (coveredX + b.x * scaleToCover) * aiScale;
-        const fy = aiDrawY + (coveredY + b.y * scaleToCover) * aiScale;
-        const fw = b.w * textScale;
-        const fh = b.h * textScale;
-        fCtx.rect(fx, fy, fw, fh);
-      }
-      fCtx.clip();
-      fCtx.drawImage(
-        srcCanvas,
-        0, 0, uploadedWidth, uploadedHeight,
-        aiDrawX + coveredX * aiScale,
-        aiDrawY + coveredY * aiScale,
-        coveredW * aiScale,
-        coveredH * aiScale
-      );
-      fCtx.restore();
-      console.log('[6] text overlay done, blocks:', scaledBlocks.length);
-    }
-
     const resultUrl = finalCanvas.toDataURL('image/png');
 
-    // ── 12. Show result ────────────────────────────────────────
+    // ── 8. Show result ────────────────────────────────────────
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('resultArea').style.display = 'flex';
-    document.getElementById('resultTitle').textContent = `${selectedName} 重排版完成`;
+    document.getElementById('resultTitle').textContent = `${selectedName} 背景延伸完成`;
     document.getElementById('afterImg').src = resultUrl;
     document.getElementById('afterDims').textContent = `${selectedW} × ${selectedH}px`;
 
@@ -928,7 +843,7 @@ async function processImage() {
     dlBtn.download = `${selectedName.replace(/\s+/g, '_')}_${selectedW}x${selectedH}.png`;
 
     setLoading(false);
-    showToast(`完成！偵測到 ${scaledBlocks.length} 個文字區塊並還原。`, 'success');
+    showToast('背景延伸完成！下載後可在 Canva 加回文字。', 'success');
 
   } catch (err) {
     setLoading(false);
