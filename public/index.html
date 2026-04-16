@@ -745,7 +745,7 @@ async function processImage() {
     const ocrRes = await fetch('/api/proxy?action=ocr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: originalBase64 })
+      body: JSON.stringify({ image: originalBase64, width: uploadedWidth, height: uploadedHeight })
     });
     const ocrData = await ocrRes.json();
     const textBlocks = ocrData.blocks || [];
