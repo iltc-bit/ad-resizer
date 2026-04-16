@@ -443,10 +443,7 @@
     <h1>廣告素材重排版工具</h1>
     <span>AI-powered creative resizer</span>
   </div>
-  <div class="api-badge">
-    <div class="api-status" id="apiStatus"></div>
-    <input type="password" id="apiKeyInput" placeholder="貼上 OpenAI API Key (sk-...)" oninput="checkApiKey(this.value)">
-  </div>
+
 </header>
 
 <div class="workspace">
@@ -590,7 +587,7 @@
       <p style="font-size:15px;font-weight:500;color:var(--text)">上傳圖片並選擇版位</p>
       <p style="font-size:13px;">AI 會自動對背景、文字、元素進行智慧重排版</p>
       <p style="font-size:12px;margin-top:8px;">
-        需要 <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent2);text-decoration:none;">OpenAI API Key</a>（需有 gpt-image-1 存取權限）
+        上傳圖片、選擇版位，即可開始 AI 重排版
       </p>
     </div>
 
@@ -650,20 +647,9 @@ let uploadedHeight = 0;
 let selectedW = 0;
 let selectedH = 0;
 let selectedName = '';
-let apiKey = '';
 
-function checkApiKey(val) {
-  apiKey = val.trim();
-  const st = document.getElementById('apiStatus');
-  if (apiKey.startsWith('sk-') && apiKey.length > 20) {
-    st.className = 'api-status ok';
-  } else if (apiKey.length > 0) {
-    st.className = 'api-status err';
-  } else {
-    st.className = 'api-status';
-  }
-  updateBtn();
-}
+
+
 
 function handleFile(file) {
   if (!file) return;
@@ -706,10 +692,8 @@ function selectSize(el, w, h, name) {
 
 function updateBtn() {
   const btn = document.getElementById('processBtn');
-  btn.disabled = !(uploadedFile && selectedW && apiKey.startsWith('sk-'));
-  if (!apiKey || !apiKey.startsWith('sk-')) {
-    btn.textContent = '請先輸入 API Key';
-  } else if (!uploadedFile) {
+  btn.disabled = !(uploadedFile && selectedW);
+  if (!uploadedFile) {
     btn.textContent = '請先上傳圖片';
   } else if (!selectedW) {
     btn.textContent = '請選擇目標版位';
@@ -853,7 +837,6 @@ Instructions:
     console.log('[6] fetching OpenAI...');
     const response = await fetch('/api/proxy', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
       body: formData
     });
     console.log('[6] status:', response.status);
