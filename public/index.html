@@ -880,11 +880,16 @@ async function processImage() {
     const covY = Math.round((selectedH - covH) / 2);
     fCtx.drawImage(aiImg, covX, covY, covW, covH);
 
-    // Step 10: Overlay original text back using clipping mask
-    // Mapping from original image coords to final canvas coords:
-    // finalX = covX + (offsetX + origX * scaleToFit) * coverScale
-    // finalY = covY + (offsetY + origY * scaleToFit) * coverScale
-    const compositeScale = scaleToFit * coverScale;
+    // Step 10: Overlay original text back onto final canvas
+    // Chain of transforms:
+    //   orig coords → API canvas: multiply by scaleToFit, add offsetX/offsetY
+    //   API canvas → final canvas: multiply by coverScale, add covX/covY
+    // So orig → final:
+    //   fx = covX + (offsetX + origX * scaleToFit) * coverScale
+    //   fy = covY + (offsetY + origY * scaleToFit) * coverScale
+    //   fscale = scaleToFit * coverScale
+
+    const textToFinalScale = scaleToFit * coverScale;
 
     if (textBlocks.length > 0) {
       fCtx.save();
@@ -900,20 +905,24 @@ async function processImage() {
         if (bw < 2 || bh < 2) continue;
         const fx = covX + (offsetX + bx * scaleToFit) * coverScale;
         const fy = covY + (offsetY + by * scaleToFit) * coverScale;
-        const fw = bw * compositeScale;
-        const fh = bh * compositeScale;
+        const fw = bw * textToFinalScale;
+        const fh = bh * textToFinalScale;
         fCtx.rect(fx, fy, fw, fh);
       }
       fCtx.clip();
-      // Draw original image through clip mask — only text regions show through
+      // Draw the original image (with text) through the clip mask
+      // Original fits at offsetX,offsetY with fitW x fitH in API canvas
+      // → in final canvas: covX + offsetX*coverScale, with fitW*coverScale size
       fCtx.drawImage(
         srcCanvas,
+        0, 0, uploadedWidth, uploadedHeight,
         covX + offsetX * coverScale,
         covY + offsetY * coverScale,
         fitW * coverScale,
         fitH * coverScale
       );
       fCtx.restore();
+      console.log('[10] text overlay done, blocks:', textBlocks.length);
     }
     const resultUrl = finalCanvas.toDataURL('image/png');
 
