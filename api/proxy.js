@@ -8,71 +8,75 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const action = url.searchParams.get('action');
 
-  // Read raw body
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const body = Buffer.concat(chunks);
 
-  // === OCR: detect text blocks via Google Vision ===
+  // === OCR via GPT-4o vision ===
   if (action === 'ocr') {
-    const visionKey = process.env.GOOGLE_VISION_API_KEY;
-    if (!visionKey) return res.status(500).json({ error: 'GOOGLE_VISION_API_KEY not set' });
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'OPENAI_API_KEY not set' });
 
     let parsed;
-    try {
-      parsed = JSON.parse(body.toString());
-    } catch(e) {
-      return res.status(400).json({ error: 'Invalid JSON body', detail: e.message });
-    }
+    try { parsed = JSON.parse(body.toString()); }
+    catch(e) { return res.status(400).json({ error: 'Invalid JSON' }); }
 
     const base64Image = parsed.image;
-    if (!base64Image) return res.status(400).json({ error: 'Missing image field' });
+    if (!base64Image) return res.status(400).json({ error: 'Missing image' });
 
-    const visionRes = await fetch(
-      `https://vision.googleapis.com/v1/images:annotate?key=${visionKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          requests: [{
-            image: { content: base64Image },
-            features: [
-              { type: 'TEXT_DETECTION', maxResults: 100 },
-              { type: 'DOCUMENT_TEXT_DETECTION', maxResults: 100 }
-            ]
-          }]
-        })
-      }
-    );
+    const gptRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Detect all text in this image and return their bounding box coordinates.
+Return ONLY a JSON array, no other text. Each item should have:
+- "text": the text content
+- "vertices": array of 4 points [{x,y},{x,y},{x,y},{x,y}] as pixel coordinates (top-left, top-right, bottom-right, bottom-left)
 
-    const visionData = await visionRes.json();
+The image is ${parsed.width}x${parsed.height} pixels.
+Be precise with coordinates. Include ALL visible text including logos, buttons, and small text.
+Return format: [{"text":"...","vertices":[{"x":0,"y":0},...]},...]`
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/png;base64,${base64Image}`, detail: 'high' }
+            }
+          ]
+        }]
+      })
+    });
 
-    // Log for debugging
-    console.log('Vision status:', visionRes.status);
-    console.log('Vision response keys:', JSON.stringify(Object.keys(visionData)));
-    const resp0 = visionData.responses?.[0];
-    console.log('Response[0] keys:', JSON.stringify(Object.keys(resp0 || {})));
-    console.log('textAnnotations count:', resp0?.textAnnotations?.length || 0);
-    console.log('error:', JSON.stringify(resp0?.error));
+    const gptData = await gptRes.json();
+    console.log('GPT OCR status:', gptRes.status);
 
-    if (resp0?.error) {
-      return res.status(400).json({ error: resp0.error.message, code: resp0.error.code });
+    if (!gptRes.ok) {
+      return res.status(400).json({ error: gptData.error?.message || 'GPT error' });
     }
 
-    const annotations = resp0?.textAnnotations || [];
-    const blocks = annotations.slice(1).map(a => ({
-      text: a.description,
-      vertices: a.boundingPoly.vertices
-    }));
+    const content = gptData.choices?.[0]?.message?.content || '[]';
+    console.log('GPT OCR raw:', content.slice(0, 200));
 
-    return res.status(200).json({
-      blocks,
-      debug: {
-        annotationCount: annotations.length,
-        visionStatus: visionRes.status,
-        imageLength: base64Image.length
-      }
-    });
+    let blocks = [];
+    try {
+      const clean = content.replace(/```json\n?|\n?```/g, '').trim();
+      blocks = JSON.parse(clean);
+    } catch(e) {
+      console.log('Parse error:', e.message);
+      blocks = [];
+    }
+
+    console.log('Parsed blocks:', blocks.length);
+    return res.status(200).json({ blocks });
   }
 
   // === OpenAI image edit ===
