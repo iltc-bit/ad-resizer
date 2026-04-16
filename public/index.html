@@ -891,10 +891,10 @@ async function processImage() {
 
     const textToFinalScale = scaleToFit * coverScale;
 
-    if (textBlocks.length > 0) {
+    if (scaledBlocks.length > 0) {
       fCtx.save();
       fCtx.beginPath();
-      for (const block of textBlocks) {
+      for (const block of scaledBlocks) {
         const verts = block.vertices;
         const xs = verts.map(v => v.x || 0);
         const ys = verts.map(v => v.y || 0);
@@ -955,7 +955,7 @@ async function processImage() {
     dlBtn.download = `${selectedName.replace(/\s+/g, '_')}_${selectedW}x${selectedH}.png`;
 
     setLoading(false);
-    showToast(`完成！偵測到 ${textBlocks.length} 個文字區塊並還原。`, 'success');
+    showToast(`完成！偵測到 ${scaledBlocks.length} 個文字區塊並還原。`, 'success');
 
   } catch (err) {
     setLoading(false);
