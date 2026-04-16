@@ -880,44 +880,41 @@ async function processImage() {
     const covY = Math.round((selectedH - covH) / 2);
     fCtx.drawImage(aiImg, covX, covY, covW, covH);
 
-    // Step 10: Overlay original text blocks back onto final canvas
-    // Calculate scale from original image coords to final canvas coords
-    // Original image was scaled to fitW x fitH, then placed at offsetX,offsetY in apiW x apiH
-    // Then aiImg (apiW x apiH) was scaled by coverScale to fill finalCanvas
-    const toFinalX = (origX) => {
-      const inApi = offsetX + (origX * scaleToFit);
-      return covX + (inApi * coverScale);
-    };
-    const toFinalY = (origY) => {
-      const inApi = offsetY + (origY * scaleToFit);
-      return covY + (inApi * coverScale);
-    };
-    const toFinalScale = scaleToFit * coverScale;
+    // Step 10: Overlay original text back using clipping mask
+    // Mapping from original image coords to final canvas coords:
+    // finalX = covX + (offsetX + origX * scaleToFit) * coverScale
+    // finalY = covY + (offsetY + origY * scaleToFit) * coverScale
+    const compositeScale = scaleToFit * coverScale;
 
-    for (const block of textBlocks) {
-      const verts = block.vertices;
-      const xs = verts.map(v => v.x || 0);
-      const ys = verts.map(v => v.y || 0);
-      const bx = Math.min(...xs);
-      const by = Math.min(...ys);
-      const bw = Math.max(...xs) - bx;
-      const bh = Math.max(...ys) - by;
-      if (bw < 2 || bh < 2) continue;
-
-      // Copy text region from original image
-      const textCanvas = document.createElement('canvas');
-      textCanvas.width = bw;
-      textCanvas.height = bh;
-      textCanvas.getContext('2d').drawImage(srcCanvas, bx, by, bw, bh, 0, 0, bw, bh);
-
-      // Draw onto final canvas at scaled position
-      const fx = toFinalX(bx);
-      const fy = toFinalY(by);
-      const fw = bw * toFinalScale;
-      const fh = bh * toFinalScale;
-      fCtx.drawImage(textCanvas, fx, fy, fw, fh);
+    if (textBlocks.length > 0) {
+      fCtx.save();
+      fCtx.beginPath();
+      for (const block of textBlocks) {
+        const verts = block.vertices;
+        const xs = verts.map(v => v.x || 0);
+        const ys = verts.map(v => v.y || 0);
+        const bx = Math.min(...xs) - 4;
+        const by = Math.min(...ys) - 4;
+        const bw = (Math.max(...xs) - Math.min(...xs)) + 8;
+        const bh = (Math.max(...ys) - Math.min(...ys)) + 8;
+        if (bw < 2 || bh < 2) continue;
+        const fx = covX + (offsetX + bx * scaleToFit) * coverScale;
+        const fy = covY + (offsetY + by * scaleToFit) * coverScale;
+        const fw = bw * compositeScale;
+        const fh = bh * compositeScale;
+        fCtx.rect(fx, fy, fw, fh);
+      }
+      fCtx.clip();
+      // Draw original image through clip mask — only text regions show through
+      fCtx.drawImage(
+        srcCanvas,
+        covX + offsetX * coverScale,
+        covY + offsetY * coverScale,
+        fitW * coverScale,
+        fitH * coverScale
+      );
+      fCtx.restore();
     }
-
     const resultUrl = finalCanvas.toDataURL('image/png');
 
     // Show result
