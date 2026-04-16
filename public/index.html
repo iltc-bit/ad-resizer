@@ -429,119 +429,6 @@
   .diff-pill.shrink { border-color: rgba(251,191,36,0.3); color: var(--warn); }
 
 
-  /* ANALYSIS PANEL */
-  #analysisPanel {
-    display: none;
-    flex-direction: column;
-    gap: 16px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px 24px;
-  }
-  .analysis-title {
-    font-size: 15px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .analysis-badge {
-    font-size: 10px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 4px;
-    background: rgba(124,106,247,0.2);
-    color: var(--accent2);
-    font-family: var(--mono);
-    letter-spacing: 0.06em;
-  }
-  .analysis-strategy {
-    font-size: 13px;
-    color: var(--text);
-    line-height: 1.7;
-    padding: 12px 16px;
-    background: var(--surface2);
-    border-radius: 8px;
-    border-left: 3px solid var(--accent);
-  }
-  .analysis-section { display: flex; flex-direction: column; gap: 8px; }
-  .analysis-section-title {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-  .element-card {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .element-type {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--accent2);
-    font-family: var(--mono);
-  }
-  .element-content { font-size: 13px; font-weight: 500; }
-  .element-position {
-    font-size: 12px;
-    color: var(--muted);
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-  .pos-arrow { color: var(--accent2); }
-  .element-reason { font-size: 11px; color: var(--muted); font-style: italic; }
-  .step-item {
-    font-size: 13px;
-    padding: 8px 12px;
-    background: var(--surface2);
-    border-radius: 6px;
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    line-height: 1.5;
-  }
-  .step-num {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--accent2);
-    font-weight: 700;
-    min-width: 20px;
-    margin-top: 1px;
-  }
-  .warning-item {
-    font-size: 12px;
-    color: var(--warn);
-    padding: 6px 12px;
-    background: rgba(251,191,36,0.08);
-    border-radius: 6px;
-    border-left: 2px solid var(--warn);
-  }
-  .analysis-loading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--muted);
-    padding: 8px 0;
-  }
-  .mini-spinner {
-    width: 16px; height: 16px;
-    border: 2px solid var(--border2);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
-  }
   /* SCROLLBAR */
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -741,12 +628,6 @@
       </div>
     </div>
 
-  <!-- ANALYSIS PANEL -->
-  <div id="analysisPanel">
-    <div class="analysis-title">
-      <span>排版建議</span>
-      <span class="analysis-badge">GPT-4o</span>
-    </div>
     <div id="analysisContent">
       <div class="analysis-loading">
         <div class="mini-spinner"></div>
@@ -851,48 +732,6 @@ function setLoading(on, text = 'AI 正在處理中...', sub = '背景延伸通�
 }
 
 
-function renderAnalysis(ana) {
-  let html = '';
-
-  if (ana.layoutStrategy) {
-    html += `<div class="analysis-strategy">${ana.layoutStrategy}</div>`;
-  }
-
-  if (ana.elements && ana.elements.length > 0) {
-    html += '<div class="analysis-section"><div class="analysis-section-title">元素位置建議</div>';
-    for (const el of ana.elements) {
-      html += `<div class="element-card">
-        <div class="element-type">${el.type || ''}</div>
-        <div class="element-content">${el.content || ''}</div>
-        <div class="element-position">
-          <span>${el.currentPosition || ''}</span>
-          <span class="pos-arrow">→</span>
-          <span style="color:var(--success)">${el.suggestedPosition || ''}</span>
-        </div>
-        ${el.reason ? `<div class="element-reason">${el.reason}</div>` : ''}
-      </div>`;
-    }
-    html += '</div>';
-  }
-
-  if (ana.canvaSteps && ana.canvaSteps.length > 0) {
-    html += '<div class="analysis-section"><div class="analysis-section-title">Canva 操作步驟</div>';
-    ana.canvaSteps.forEach((step, i) => {
-      html += `<div class="step-item"><span class="step-num">${i+1}.</span><span>${step}</span></div>`;
-    });
-    html += '</div>';
-  }
-
-  if (ana.warnings && ana.warnings.length > 0) {
-    html += '<div class="analysis-section"><div class="analysis-section-title">注意事項</div>';
-    for (const w of ana.warnings) {
-      html += `<div class="warning-item">${w}</div>`;
-    }
-    html += '</div>';
-  }
-
-  document.getElementById('analysisContent').innerHTML = html || '<p style="color:var(--muted);font-size:13px;">無法解析建議內容。</p>';
-}
 
 async function processImage() {
   if (!uploadedFile || !selectedW) return;
@@ -1015,32 +854,7 @@ async function processImage() {
     dlBtn.download = `${selectedName.replace(/\s+/g, '_')}_${selectedW}x${selectedH}.png`;
 
     setLoading(false);
-    showToast('背景延伸完成！正在分析排版建議...', 'success');
-
-    // ── 9. Run layout analysis in background ─────────────────
-    const analysisPanel = document.getElementById('analysisPanel');
-    analysisPanel.style.display = 'flex';
-    document.getElementById('analysisContent').innerHTML = '<div class="analysis-loading"><div class="mini-spinner"></div><span>GPT-4o 分析排版建議中...</span></div>';
-
-    try {
-      const thumbBase64 = document.getElementById('thumbImg').src.split(',')[1];
-      const anaRes = await fetch('/api/proxy?action=analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: thumbBase64,
-          origW: uploadedWidth,
-          origH: uploadedHeight,
-          targetW: selectedW,
-          targetH: selectedH,
-          targetName: selectedName
-        })
-      });
-      const ana = await anaRes.json();
-      renderAnalysis(ana);
-    } catch(e) {
-      document.getElementById('analysisContent').innerHTML = '<p style="color:var(--muted);font-size:13px;">分析失敗，請重試。</p>';
-    }
+    showToast('背景延伸完成！下載後可在 Canva 加回文字。', 'success');
 
   } catch (err) {
     setLoading(false);
